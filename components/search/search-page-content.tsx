@@ -34,11 +34,13 @@ export function SearchPageContent({ userId }: SearchPageContentProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: filters.keywords, // API expects "query" not "title" or "keywords"
+          query: filters.jobTitles[0] || "", // Use first job title as primary query/title
+          jobTitles: filters.jobTitles,
+          keywords: filters.keywords, // Secondary keywords
           platforms: filters.platforms,
           countries: filters.countries,
-          jobTitles: filters.jobTitles ? filters.jobTitles.split(",").map((j) => j.trim()) : [],
           experienceLevel: filters.experienceLevel,
+          fetchCount: filters.fetchCount,
         }),
       })
 

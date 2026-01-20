@@ -15,12 +15,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { query, platforms: rawPlatforms, countries, jobTitles, experienceLevel } = body
+    const { query, platforms: rawPlatforms, countries, jobTitles, experienceLevel, keywords, fetchCount } = body
 
     // Normalize platforms to lowercase to handle "LinkedIn" vs "linkedin"
     const platforms = rawPlatforms.map((p: string) => p.toLowerCase())
 
-    console.log("[v0] Received search request:", { query, platforms, countries, jobTitles, experienceLevel })
+    console.log("[v0] Received search request:", { query, platforms, countries, jobTitles, experienceLevel, fetchCount })
 
     // Ensure user profile exists
     const { data: profile } = await supabase.from("profiles").select("id").eq("id", user.id).single()
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         {
           user_id: user.id,
           title: query,
-          keywords: [query],
+          keywords: keywords || [query], // Store secondary keywords
           platforms,
           countries,
           job_titles: jobTitles || [],
@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
 
     if (platforms.includes("linkedin")) {
       try {
-        console.log("[v0] Fetching from Apify with fetch_count: 100")
+        const count = fetchCount || 100
+        console.log(`[v0] Fetching from Apify with fetch_count: ${count}`)
 
         const apifyClient = new ApifyClient({
           token: process.env.APIFY_API_TOKEN,
@@ -94,13 +95,19 @@ export async function POST(request: NextRequest) {
 
         console.log("[v0] Mapped countries:", mappedCountries)
 
+        // Prepare company keywords: combine experience level and any secondary keywords
+        const companyKeywords = [
+          ...(experienceLevel ? [experienceLevel] : []),
+          ...(keywords ? keywords : [])
+        ]
+
         const run = await apifyClient.actor("code_crafter/leads-finder").call(
           {
-            contact_job_title: [query, ...(jobTitles || [])], // Combine query and specific job titles
+            contact_job_title: jobTitles || [query], // Use specific job titles array
             contact_location: mappedCountries,
-            fetch_count: 100,
+            fetch_count: count,
             email_status: ["validated", "not_validated", "unknown"], // Relax email filter
-            company_keywords: experienceLevel ? [experienceLevel] : [], // Add experience level to company keywords
+            company_keywords: companyKeywords, // Add experience level and other keywords to company keywords
           },
           {
             timeout: 120000, // 2 minutes timeout
@@ -111,7 +118,7 @@ export async function POST(request: NextRequest) {
 
         // Get results from Apify dataset
         const { items: leadsData } = await apifyClient.dataset(run.defaultDatasetId).listItems({
-          limit: 100,
+          limit: count,
         })
 
         console.log("[v0] Apify returned", leadsData.length, "leads")
@@ -146,7 +153,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const finalResults = allResults.slice(0, 50)
+    const finalResults = allResults.slice(0, fetchCount || 50)
 
     const formattedResults = finalResults.map((profile) => {
       // Extract data from profile_data if not directly on profile

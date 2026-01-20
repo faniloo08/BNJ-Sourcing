@@ -11,11 +11,12 @@ import { useState } from "react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export interface SearchFilters {
-  keywords: string
+  keywords: string[]
   platforms: string[]
   countries: string[]
-  jobTitles: string
+  jobTitles: string[]
   experienceLevel: string
+  fetchCount: number
 }
 
 interface SearchFiltersProps {
@@ -46,10 +47,13 @@ const AFRICAN_COUNTRIES = [
 
 const EXPERIENCE_LEVELS = ["Débutant", "Junior", "Intermédiaire", "Senior", "Expert"]
 
+import { TagInput } from "@/components/ui/tag-input"
+
 export function SearchFiltersComponent({ onSearch, isLoading = false }: SearchFiltersProps) {
-  const [keywords, setKeywords] = useState("")
-  const [jobTitles, setJobTitles] = useState("")
+  const [jobTitles, setJobTitles] = useState<string[]>([])
+  const [keywords, setKeywords] = useState<string[]>([])
   const [experienceLevel, setExperienceLevel] = useState("")
+  const [fetchCount, setFetchCount] = useState<number>(100)
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([])
   const [selectedCountries, setSelectedCountries] = useState<string[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -64,8 +68,8 @@ export function SearchFiltersComponent({ onSearch, isLoading = false }: SearchFi
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!keywords.trim() || selectedPlatforms.length === 0 || selectedCountries.length === 0) {
-      alert("Veuillez remplir les champs requis")
+    if (jobTitles.length === 0 || selectedPlatforms.length === 0 || selectedCountries.length === 0) {
+      alert("Veuillez remplir les champs requis (Titre de poste, Plateformes, Pays)")
       return
     }
 
@@ -75,6 +79,7 @@ export function SearchFiltersComponent({ onSearch, isLoading = false }: SearchFi
       countries: selectedCountries,
       jobTitles,
       experienceLevel,
+      fetchCount,
     })
   }
 
@@ -86,17 +91,31 @@ export function SearchFiltersComponent({ onSearch, isLoading = false }: SearchFi
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Keywords Section */}
+
+          {/* Job Titles Section (Renamed from Keywords) */}
           <div className="grid gap-4">
-            <Label htmlFor="keywords">Mots-clés *</Label>
-            <Input
-              id="keywords"
-              placeholder="Ex: Python, Data Science, DevOps..."
-              value={keywords}
-              onChange={(e) => setKeywords(e.target.value)}
-              required
+            <Label htmlFor="jobTitles">Titre de poste *</Label>
+            <TagInput
+              id="jobTitles"
+              placeholder="Ex: Data Scientist, Développeur Backend..."
+              values={jobTitles}
+              onValuesChange={setJobTitles}
+              maxTags={5}
             />
-            <p className="text-xs text-muted-foreground">Entrez les compétences ou domaines de recherche</p>
+            <p className="text-xs text-muted-foreground">Appuyez sur Entrée ou Virgule pour ajouter plusieurs titres (max 5)</p>
+          </div>
+
+          {/* Fetch Count Section */}
+          <div className="grid gap-4">
+            <Label htmlFor="fetchCount">Nombre de profils à rechercher</Label>
+            <Input
+              id="fetchCount"
+              type="number"
+              min={1}
+              max={500}
+              value={fetchCount}
+              onChange={(e) => setFetchCount(Number.parseInt(e.target.value) || 100)}
+            />
           </div>
 
           {/* Platforms Section */}
@@ -188,16 +207,7 @@ export function SearchFiltersComponent({ onSearch, isLoading = false }: SearchFi
           {/* Advanced Filters */}
           {showAdvanced && (
             <div className="space-y-4 border-t pt-4">
-              <div className="grid gap-4">
-                <Label htmlFor="jobTitles">Titres de poste</Label>
-                <Input
-                  id="jobTitles"
-                  placeholder="Ex: Data Engineer, Product Manager..."
-                  value={jobTitles}
-                  onChange={(e) => setJobTitles(e.target.value)}
-                />
-              </div>
-
+              {/* Experience Level */}
               <div className="grid gap-4">
                 <Label htmlFor="experience">Niveau d'expérience</Label>
                 <select
@@ -213,6 +223,19 @@ export function SearchFiltersComponent({ onSearch, isLoading = false }: SearchFi
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Keywords Section (New Bottom Position) */}
+              <div className="grid gap-4">
+                <Label htmlFor="keywords">Mots-clés (Compétences)</Label>
+                <TagInput
+                  id="keywords"
+                  placeholder="Ex: Python, React, AWS..."
+                  values={keywords}
+                  onValuesChange={setKeywords}
+                  maxTags={5}
+                />
+                <p className="text-xs text-muted-foreground">Compétences spécifiques ou mots-clés d'entreprise</p>
               </div>
             </div>
           )}

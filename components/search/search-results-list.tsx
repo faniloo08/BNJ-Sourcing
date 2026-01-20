@@ -4,6 +4,8 @@ import { useState } from "react"
 import type { FoundProfile } from "./search-page-content"
 import { ProfileDetailsDialog } from "./profile-details-dialog"
 
+import { createClient } from "@/lib/supabase/client"
+
 interface SearchResultsListProps {
   results: FoundProfile[]
   isLoading: boolean
@@ -24,16 +26,76 @@ export function SearchResultsList({ results, isLoading, searchTitle }: SearchRes
   const [selectedProfile, setSelectedProfile] = useState<FoundProfile | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
-  const handleSaveProfile = (profileId: string) => {
+  /* 
+   * Updated logic to save directly to Supabase
+   */
+
+  const handleSaveProfile = async (profileId: string) => {
+    // Optimistic update
+    const isSaved = savedProfiles.has(profileId)
+
     setSavedProfiles((prev) => {
       const next = new Set(prev)
-      if (next.has(profileId)) {
+      if (isSaved) {
         next.delete(profileId)
       } else {
         next.add(profileId)
       }
       return next
     })
+
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        throw new Error("User not authenticated")
+      }
+
+      if (isSaved) {
+        // Remove from favorites
+        // First find the favorite entry
+        const { data: favorite } = await supabase
+          .from("favorites")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("profile_id", profileId)
+          .single()
+
+        if (favorite) {
+          await supabase.from("favorites").delete().eq("id", favorite.id)
+        }
+      } else {
+        // Add to favorites
+        // Check if already favorite just in case
+        const { data: existing } = await supabase
+          .from("favorites")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("profile_id", profileId)
+          .single()
+
+        if (!existing) {
+          await supabase.from("favorites").insert({
+            user_id: user.id,
+            profile_id: profileId
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error toggling favorite:", error)
+      // Revert optimistic update on error
+      setSavedProfiles((prev) => {
+        const next = new Set(prev)
+        if (isSaved) {
+          next.add(profileId)
+        } else {
+          next.delete(profileId)
+        }
+        return next
+      })
+      alert("Erreur lors de la sauvegarde du favori")
+    }
   }
 
   const handleViewProfile = (profile: FoundProfile) => {
